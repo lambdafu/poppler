@@ -69,10 +69,12 @@ static int y = 0;
 static int w = 0;
 static int h = 0;
 static GBool bbox = gFalse;
+static GBool bboxExtended = gFalse;
 static GBool physLayout = gFalse;
 static double fixedPitch = 0;
 static GBool rawOrder = gFalse;
 static GBool htmlMeta = gFalse;
+static GBool xmlMeta = gFalse;
 static char textEncName[128] = "";
 static char textEOL[16] = "";
 static GBool noPageBreaks = gFalse;
@@ -106,6 +108,8 @@ static const ArgDesc argDesc[] = {
    "keep strings in content stream order"},
   {"-htmlmeta", argFlag,   &htmlMeta,       0,
    "generate a simple HTML file, including the meta information"},
+  {"-xmlmeta", argFlag,    &xmlMeta,        0,
+   "generate a simple XML file, including the meta information.  Overrides -htmlmeta"},
   {"-enc",     argString,   textEncName,    sizeof(textEncName),
    "output text encoding name"},
   {"-listenc",argFlag,     &printEnc,      0,
@@ -116,6 +120,8 @@ static const ArgDesc argDesc[] = {
    "don't insert page breaks between pages"},
   {"-bbox", argFlag,     &bbox,  0,
    "output bounding box for each word and page size to html.  Sets -htmlmeta"},
+  {"-bbox-extended", argFlag,     &bboxExtended,  0,
+   "same as -bbox, but print more info.  Sets -bbox and -htmlmeta"},
   {"-opw",     argString,   ownerPassword,  sizeof(ownerPassword),
    "owner password (for encrypted files)"},
   {"-upw",     argString,   userPassword,   sizeof(userPassword),
@@ -159,6 +165,17 @@ static std::string myXmlTokenReplace(const char *inString){
   return myString;
 }
 
+static std::string myXmlEncodingName(const std::string& popplerEncodingName) {
+  if (popplerEncodingName == "ASCII7")
+    return "US-ASCII";
+  else if (popplerEncodingName == "Latin1")
+    return "ISO-8859-1";
+  else if (popplerEncodingName == "UCS-2")
+    return "ISO-10646-UCS-2";
+  else
+    return popplerEncodingName;
+}
+
 int main(int argc, char *argv[]) {
   PDFDoc *doc;
   GooString *fileName;
@@ -176,7 +193,13 @@ int main(int argc, char *argv[]) {
 
   // parse args
   ok = parseArgs(argDesc, &argc, argv);
+  if (bboxExtended) {
+    bbox = gTrue;
+  }
   if (bbox) {
+    htmlMeta = gTrue;
+  }
+  if (xmlMeta) {
     htmlMeta = gTrue;
   }
   if (!ok || (argc < 2 && !printEnc) || argc > 3 || printVersion || printHelp) {
@@ -281,7 +304,7 @@ int main(int argc, char *argv[]) {
     } else {
       textFileName = fileName->copy();
     }
-    textFileName->append(htmlMeta ? ".html" : ".txt");
+    textFileName->append(xmlMeta ? ".xml" : (htmlMeta ? ".html" : ".txt"));
   }
 
   // get page range
@@ -309,9 +332,15 @@ int main(int argc, char *argv[]) {
 	goto err3;
       }
     }
-    fputs("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">", f);
-    fputs("<html xmlns=\"http://www.w3.org/1999/xhtml\">\n", f);
-    fputs("<head>\n", f);
+    if (xmlMeta) {
+      std::string xmlEncoding = myXmlEncodingName(globalParams->getTextEncodingName()->getCString());
+      fprintf(f, "<?xml version=\"1.0\" encoding=\"%s\"?>\n", xmlEncoding.c_str());
+      fputs("<doc>\n", f);
+    } else {
+      fputs("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">", f);
+      fputs("<html xmlns=\"http://www.w3.org/1999/xhtml\">\n", f);
+      fputs("<head>\n", f);
+    }
     doc->getDocInfo(&info);
     if (info.isDict()) {
       Object obj;
@@ -337,12 +366,20 @@ int main(int argc, char *argv[]) {
 		    "<meta name=\"ModDate\" content=\"\"/>\n");
     }
     info.free();
-    fputs("</head>\n", f);
-    fputs("<body>\n", f);
+    if (!xmlMeta) {
+      fputs("</head>\n", f);
+      fputs("<body>\n", f);
+    }
     if (!bbox) {
       fputs("<pre>\n", f);
+    } else if (xmlMeta) {
+      fputs("<pages>\n", f);
+    } else {
+      fputs("<doc>\n", f);
+    }
+    if (!bbox) {
       if (f != stdout) {
-	fclose(f);
+        fclose(f);
       }
     }
   }
@@ -351,28 +388,43 @@ int main(int argc, char *argv[]) {
   if (htmlMeta && bbox) { // htmlMeta && is superfluous but makes gcc happier
     textOut = new TextOutputDev(NULL, physLayout, fixedPitch, rawOrder, htmlMeta);
 
-    if (textOut->isOk()) {
-      fprintf(f, "<doc>\n");
-      for (int page = firstPage; page <= lastPage; ++page) {
-        fprintf(f, "  <page width=\"%f\" height=\"%f\">\n",doc->getPageMediaWidth(page), doc->getPageMediaHeight(page));
-        doc->displayPage(textOut, page, resolution, resolution, 0, gTrue, gFalse, gFalse);
-        TextWordList *wordlist = textOut->makeWordList();
-        const int word_length = wordlist != NULL ? wordlist->getLength() : 0;
-        TextWord *word;
-        double xMinA, yMinA, xMaxA, yMaxA;
-        if (word_length == 0)
-          fprintf(stderr, "no word list\n");
+    for (int page = firstPage; page <= lastPage; ++page) {
+      fprintf(f, "  <page width=\"%f\" height=\"%f\"", doc->getPageMediaWidth(page), doc->getPageMediaHeight(page));
+      if (bboxExtended) {
+        GooString pageLabel;
+        if (doc->getCatalog()->indexToLabel(page-1, &pageLabel)) {
+          fprintf(f, " label=\"%s\"", pageLabel.getCString());
+        }
+      }
+      fprintf(f, ">\n");
+      doc->displayPage(textOut, page, resolution, resolution, 0, gTrue, gFalse, gFalse);
+      TextWordList *wordlist = textOut->makeWordList();
+      const int word_length = wordlist != NULL ? wordlist->getLength() : 0;
+      TextWord *word;
+      double xMinA, yMinA, xMaxA, yMaxA;
+      if (word_length == 0)
+        fprintf(stderr, "no word list\n");
 
-        for (int i = 0; i < word_length; ++i) {
-          word = wordlist->get(i);
-          word->getBBox(&xMinA, &yMinA, &xMaxA, &yMaxA);
-          const std::string myString = myXmlTokenReplace(word->getText()->getCString());
+      for (int i = 0; i < word_length; ++i) {
+        word = wordlist->get(i);
+        word->getBBox(&xMinA, &yMinA, &xMaxA, &yMaxA);
+        const std::string myString = myXmlTokenReplace(word->getText()->getCString());
+        if (bboxExtended) {
+          fprintf(f,"    <word xMin=\"%f\" yMin=\"%f\" xMax=\"%f\" yMax=\"%f\" baseline=\"%f\" rot=\"%d\" fontname=\"%s\" fontsize=\"%f\" underline=\"%s\" spaceafter=\"%s\">%s</word>\n",
+                  xMinA, yMinA, xMaxA, yMaxA,
+                  word->getBaseline(),
+                  word->getRotation(),
+                  word->getFontName()->getCString(),
+                  word->getFontSize(),
+                  word->isUnderlined() ? "true" : "false",
+                  word->hasSpaceAfter() ? "true" : "false",
+                  myString.c_str());
+        } else {
           fprintf(f,"    <word xMin=\"%f\" yMin=\"%f\" xMax=\"%f\" yMax=\"%f\">%s</word>\n", xMinA, yMinA, xMaxA, yMaxA, myString.c_str());
         }
-        fprintf(f, "  </page>\n");
-        delete wordlist;
       }
-      fprintf(f, "</doc>\n");
+      fprintf(f, "  </page>\n");
+      delete wordlist;
     }
     if (f != stdout) {
       fclose(f);
@@ -412,9 +464,19 @@ int main(int argc, char *argv[]) {
 	goto err3;
       }
     }
-    if (!bbox) fputs("</pre>\n", f);
-    fputs("</body>\n", f);
-    fputs("</html>\n", f);
+    if (!bbox) {
+      fputs("</pre>\n", f);
+    } else if (xmlMeta) {
+      fputs("</pages>\n", f);
+    } else {
+      fputs("</doc>\n", f);
+    }
+    if (xmlMeta) {
+      fputs("</doc>\n", f);
+    } else {
+      fputs("</body>\n", f);
+      fputs("</html>\n", f);
+    }
     if (f != stdout) {
       fclose(f);
     }
