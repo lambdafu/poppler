@@ -176,6 +176,24 @@ static std::string myXmlEncodingName(const std::string& popplerEncodingName) {
     return popplerEncodingName;
 }
 
+ 
+char *
+sanity_filter(const char *word)
+{
+  static char buffer[1024];
+  int i = 0;
+  char *bufp = buffer;
+  while (i < 1023 && word[i])
+    {
+      if (isprint(word[i]))
+	*(bufp++) = word[i];
+      i++;
+    }
+  *bufp = '\0';
+  return buffer;         
+}
+      
+
 int main(int argc, char *argv[]) {
   PDFDoc *doc;
   GooString *fileName;
@@ -418,7 +436,7 @@ int main(int argc, char *argv[]) {
                   word->getFontSize(),
                   word->isUnderlined() ? "true" : "false",
                   word->hasSpaceAfter() ? "true" : "false",
-                  myString.c_str());
+                  sanity_filter(myString.c_str()));
         } else {
           fprintf(f,"    <word xMin=\"%f\" yMin=\"%f\" xMax=\"%f\" yMax=\"%f\">%s</word>\n", xMinA, yMinA, xMaxA, yMaxA, myString.c_str());
         }
