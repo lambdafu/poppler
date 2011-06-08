@@ -424,7 +424,10 @@ int main(int argc, char *argv[]) {
     textOut = new TextOutputDev(NULL, physLayout, fixedPitch, rawOrder, htmlMeta);
 
     for (int page = firstPage; page <= lastPage; ++page) {
-      fprintf(f, "  <page width=\"%f\" height=\"%f\"", doc->getPageMediaWidth(page), doc->getPageMediaHeight(page));
+      fprintf(f, "  <page width=\"%f\" height=\"%f\" rotate=\"%i\"",
+	      doc->getPageCropWidth(page), doc->getPageCropHeight(page),
+	      doc->getPageRotate(page));
+
       if (bboxExtended) {
         GooString pageLabel;
         if (doc->getCatalog()->indexToLabel(page-1, &pageLabel)) {
@@ -444,9 +447,15 @@ int main(int argc, char *argv[]) {
         word = wordlist->get(i);
         word->getBBox(&xMinA, &yMinA, &xMaxA, &yMaxA);
         const std::string myString = myXmlTokenReplace(word->getText()->getCString());
+
+	/* Note on coordinate systems: Origin for PDF is southwest,
+	   origin for this XML file is northwest.  */
         if (bboxExtended) {
           fprintf(f,"    <word xMin=\"%f\" yMin=\"%f\" xMax=\"%f\" yMax=\"%f\" baseline=\"%f\" rot=\"%d\" fontname=\"%s\" fontsize=\"%f\" underline=\"%s\" spaceafter=\"%s\">%s</word>\n",
-                  xMinA, yMinA, xMaxA, yMaxA,
+		  xMinA + (doc->getPage(page)->getMediaBox()->x1 - doc->getPage(page)->getCropBox()->x1),
+		  yMinA - (doc->getPage(page)->getMediaBox()->y2 - doc->getPage(page)->getCropBox()->y2),
+		  xMaxA + (doc->getPage(page)->getMediaBox()->x1 - doc->getPage(page)->getCropBox()->x1),
+		  yMaxA - (doc->getPage(page)->getMediaBox()->y2 - doc->getPage(page)->getCropBox()->y2),
                   word->getBaseline(),
                   word->getRotation(),
                   word->getFontName()->getCString(),
@@ -456,10 +465,10 @@ int main(int argc, char *argv[]) {
                   sanity_filter(myString.c_str()));
         } else {
           fprintf(f,"    <word xMin=\"%f\" yMin=\"%f\" xMax=\"%f\" yMax=\"%f\">%s</word>\n",
-		  xMinA - doc->getPage(page)->getCropBox()->x1,
-		  yMinA - doc->getPage(page)->getCropBox()->y1,
-		  xMaxA - doc->getPage(page)->getCropBox()->x1,
-		  yMaxA - doc->getPage(page)->getCropBox()->y1,
+		  xMinA + (doc->getPage(page)->getMediaBox()->x1 - doc->getPage(page)->getCropBox()->x1),
+		  yMinA - (doc->getPage(page)->getMediaBox()->y2 - doc->getPage(page)->getCropBox()->y2),
+		  xMaxA + (doc->getPage(page)->getMediaBox()->x1 - doc->getPage(page)->getCropBox()->x1),
+		  yMaxA - (doc->getPage(page)->getMediaBox()->y2 - doc->getPage(page)->getCropBox()->y2),
 		  sanity_filter(myString.c_str()));
         }
       }
