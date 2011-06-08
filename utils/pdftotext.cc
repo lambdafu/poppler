@@ -177,6 +177,7 @@ static std::string myXmlEncodingName(const std::string& popplerEncodingName) {
 }
 
  
+/* FIXME: This is probably horribly wrong for Unicode.  */
 char *
 sanity_filter(const char *word)
 {
@@ -185,7 +186,7 @@ sanity_filter(const char *word)
   char *bufp = buffer;
   while (i < 1023 && word[i])
     {
-      if (isprint(word[i]))
+      if (!iscntrl(word[i]))
 	*(bufp++) = word[i];
       i++;
     }
@@ -438,7 +439,12 @@ int main(int argc, char *argv[]) {
                   word->hasSpaceAfter() ? "true" : "false",
                   sanity_filter(myString.c_str()));
         } else {
-          fprintf(f,"    <word xMin=\"%f\" yMin=\"%f\" xMax=\"%f\" yMax=\"%f\">%s</word>\n", xMinA, yMinA, xMaxA, yMaxA, myString.c_str());
+          fprintf(f,"    <word xMin=\"%f\" yMin=\"%f\" xMax=\"%f\" yMax=\"%f\">%s</word>\n",
+		  xMinA - doc->getPage(page)->getCropBox()->x1,
+		  yMinA - doc->getPage(page)->getCropBox()->y1,
+		  xMaxA - doc->getPage(page)->getCropBox()->x1,
+		  yMaxA - doc->getPage(page)->getCropBox()->y1,
+		  sanity_filter(myString.c_str()));
         }
       }
       fprintf(f, "  </page>\n");
