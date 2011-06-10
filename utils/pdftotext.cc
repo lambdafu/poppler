@@ -186,8 +186,24 @@ sanity_filter(const char *word)
   char *bufp = buffer;
   while (i < 1023 && word[i])
     {
+      char ch = word[i];
       if (!iscntrl(word[i]))
 	*(bufp++) = word[i];
+      else if (ch == '&' || ch == '<' || ch == '>')
+	{
+	  *(bufp++) = '&';
+	  *(bufp++) = '#';
+	  *(bufp++) = 'x';
+#define HEXDIGIT(x) (((x) < 10) ? ((x) + '0') : ((x) - 10 + 'a'))
+	  *(bufp++) = HEXDIGIT((((unsigned char)ch) >> 4) & 0xf);
+	  *(bufp++) = HEXDIGIT(((unsigned char)ch) & 0xf);
+	  *(bufp++) = ';';
+	}
+      else
+	/* We print something, because otherwise we get None elements
+	   later in python XML.  Also, we should show that there is at
+	   least something.  */
+	*(bufp++) = '?';
       i++;
     }
   *bufp = '\0';
