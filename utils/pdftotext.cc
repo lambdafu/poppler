@@ -458,7 +458,7 @@ int main(int argc, char *argv[]) {
 		  yMaxA - (doc->getPage(page)->getMediaBox()->y2 - doc->getPage(page)->getCropBox()->y2),
                   word->getBaseline(),
                   word->getRotation(),
-                  word->getFontName()->getCString(),
+                  (word->getFontName() != NULL ? word->getFontName()->getCString() : ""),
                   word->getFontSize(),
                   word->isUnderlined() ? "true" : "false",
                   word->hasSpaceAfter() ? "true" : "false",
