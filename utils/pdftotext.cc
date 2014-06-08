@@ -458,7 +458,8 @@ int main(int argc, char *argv[]) {
 		  yMaxA - (doc->getPage(page)->getMediaBox()->y2 - doc->getPage(page)->getCropBox()->y2),
                   word->getBaseline(),
                   word->getRotation(),
-                  (word->getFontName() != NULL ? word->getFontName()->getCString() : ""),
+		  // Mh, why is font name per character, but font size not?
+                  (word->getFontName(0) != NULL ? word->getFontName(0)->getCString() : ""),
                   word->getFontSize(),
                   word->isUnderlined() ? "true" : "false",
                   word->hasSpaceAfter() ? "true" : "false",
